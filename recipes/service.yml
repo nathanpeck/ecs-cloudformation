@@ -28,12 +28,13 @@ Parameters:
     Description: The priority of the rule that is added to the load balancer
   DesiredCount:
     Type: Number
-    Default: 2
+    Default: 0
     Description: How many copies of the service task to run
 
 # Determine whether or not to create a service that is attached to a load balancer
 Conditions:
   AttachedToLoadBalancer: !Not [ !Equals [!Ref 'Path', ''] ]
+  NewService: !Equals [!Ref 'DesiredCount', 2]
 
 Resources:
   # A log group for storing the container logs for this service
@@ -50,13 +51,23 @@ Resources:
       TaskRoleArn: !Ref TaskRole
       ContainerDefinitions:
         - Name: !Ref 'ServiceName'
-          Cpu: 256
-          Memory: 512
+          Cpu: 512
+          Memory: 256
           Image: !Ref 'ImageUrl'
+          Ulimits:
+            - Name: nofile
+              HardLimit: 65535
+              SoftLimit: 65535
           PortMappings:
             - ContainerPort: 3000
               HostPort: 0
           Environment:
+            - Name: 'DAX_ENDPOINT'
+              Value:
+                Fn::ImportValue:
+                  !Join [':', [!Ref 'StackName', 'DAXEndpoint']]
+            - Name: 'UV_THREAD_POOL'
+              Value: '15'
             - Name: 'EXTERNAL_URL'
               Value:
                 Fn::ImportValue:
@@ -76,7 +87,7 @@ Resources:
               awslogs-region: !Ref 'AWS::Region'
               awslogs-stream-prefix: !Ref 'ServiceName'
 
-  # Create an ECS service that isn't attached to a loadbalancer
+  # Create an ECS service
   Service:
     Type: AWS::ECS::Service
     DependsOn:
@@ -88,12 +99,16 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
+      DesiredCount:
+        Fn::If:
+          - 'NewService'
+          - 2
+          - !Ref "AWS::NoValue"
       PlacementStrategies:
         - Type: spread
           Field: attribute:ecs.availability-zone
-        - Type: binpack
-          Field: cpu
-      DesiredCount: !Ref 'DesiredCount'
+        - Type: spread
+          Field: instanceId
       ServiceName:
         # The following statements always produces the same value for
         # the service name, but the select exists as a hack to conditionally
@@ -198,7 +213,7 @@ Resources:
       StepScalingPolicyConfiguration:
         AdjustmentType: 'ChangeInCapacity'
         StepAdjustments:
-          - MetricIntervalLowerBound: 0
+          - MetricIntervalUpperBound: 0
             ScalingAdjustment: -1
         MetricAggregationType: 'Average'
         Cooldown: 60
@@ -227,10 +242,13 @@ Resources:
         AdjustmentType: 'ChangeInCapacity'
         StepAdjustments:
           - MetricIntervalLowerBound: 0
-            MetricIntervalUpperBound: 20
+            MetricIntervalUpperBound: 15
             ScalingAdjustment: 1
-          - MetricIntervalLowerBound: 20
+          - MetricIntervalLowerBound: 15
+            MetricIntervalUpperBound: 25
             ScalingAdjustment: 2
+          - MetricIntervalLowerBound: 25
+            ScalingAdjustment: 3
         MetricAggregationType: 'Average'
         Cooldown: 60
 
