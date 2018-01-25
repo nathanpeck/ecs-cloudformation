@@ -64,8 +64,8 @@ Resources:
       Memory: !Ref 'ContainerMemory'
       ContainerDefinitions:
         - Name: !Ref 'ServiceName'
-          Cpu: 256
-          Memory: 512
+          Cpu: !Ref 'ContainerCpu'
+          Memory: !Ref 'ContainerMemory'
           Image: !Ref 'ImageUrl'
           PortMappings:
             - ContainerPort: !Ref 'ContainerPort'
