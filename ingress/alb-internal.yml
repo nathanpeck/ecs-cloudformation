@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Internal, private load balancer that only accepts traffic from
+             containers in the cluster.
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: The name of the environment to add this load balancer to
+Resources:
+  EcsSecurityGroupIngressFromPrivateALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from the private ALB
+      GroupId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:ContainerSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref 'PrivateLoadBalancerSG'
+
+  # Private load balancer, hosted in private subnets, that only
+  # accepts traffic from other containers in the Fargate cluster, and is
+  # intended for private services that should not be accessed directly
+  # by the public.
+  PrivateLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the internal load balancer
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+  PrivateLoadBalancerIngressFromECS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Only accept traffic from a container in the fargate container security group
+      GroupId: !Ref 'PrivateLoadBalancerSG'
+      IpProtocol: -1
+      SourceSecurityGroupId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:ContainerSecurityGroup
+  PrivateLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internal
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        # This load balancer is put into the private subnet, so that there is no
+        # route for the public to even be able to access the private load balancer.
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetOne
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetTwo
+      SecurityGroups: [!Ref 'PrivateLoadBalancerSG']
+  # This dummy target group is used to setup the ALB to just drop traffic
+  # initially, before any real service target groups have been added.
+  DummyTargetGroupPrivate:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+  PrivateLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - PrivateLoadBalancer
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'DummyTargetGroupPrivate'
+          Type: 'forward'
+      LoadBalancerArn: !Ref 'PrivateLoadBalancer'
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  PrivateListener:
+    Description: The ARN of the public load balancer's Listener
+    Value: !Ref PrivateLoadBalancerListener
+    Export:
+      Name: !Sub ${EnvironmentName}:PrivateListener
+  InternalUrl:
+    Description: The url of the internal load balancer
+    Value: !Sub http://${PrivateLoadBalancer.DNSName}
+    Export:
+      Name: !Sub ${EnvironmentName}:InternalUrl
