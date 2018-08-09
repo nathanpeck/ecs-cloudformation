@@ -1,3 +1,11 @@
+## August 9th, 2018
+
+- Fixed mismatched color in the diagram image for private subnet, private LB
+- Fixed bug with export namespacing in Fargate clusters
+- Found and fixed a few more !Join functions
+- Added an example of private, internal service discovery
+- Reorganizing the README.md a little bit
+
 ## August 7th, 2018
 
 - Broke templates up so that there is a cluster template, ingress template, and service template instead of a combined cluster + ingress template.
