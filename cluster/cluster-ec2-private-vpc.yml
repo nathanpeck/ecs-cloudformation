@@ -8,7 +8,6 @@ Parameters:
     Default: production
     Description: "A friendly environment name that will be used for namespacing all cluster resources. Example: staging, qa, or production"
   InstanceType:
-    Description: EC2 instance type
     Type: String
     Default: c5.xlarge
     Description: Class of EC2 instance used to host containers. Choose t2 for testing, m5 for general purpose, c5 for CPU intensive services, and r5 for memory intensive services
@@ -26,7 +25,6 @@ Parameters:
     Default: '6'
     Description: Maximum number of EC2 instances that can be launched in your ECS cluster.
   ECSAMI:
-    Description: AMI ID
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id
     Description: The Amazon Machine Image ID used for the cluster, leave it as the default value to get the latest AMI
